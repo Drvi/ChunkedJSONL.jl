@@ -2,123 +2,123 @@ using ChunkedJSONL: prepare_buffer!
 using Test
 
 @testset "initial buffer fill" begin
-    buf = fill(UInt8(' '), 10);
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer(""), buf, UInt32(0)) == 0
 
-    buf = fill(UInt8(' '), 10);
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer(" "), buf, UInt32(0)) == 0
 
-    buf = fill(UInt8(' '), 1);
+    buf = zeros(UInt8, 1);
     @test prepare_buffer!(IOBuffer(" "), buf, UInt32(0)) == 0
 
-    buf = fill(UInt8(' '), 1);
+    buf = zeros(UInt8, 1);
     @test prepare_buffer!(IOBuffer("  "), buf, UInt32(0)) == 0
 
-    buf = fill(UInt8(' '), 2);
+    buf = zeros(UInt8, 2);
     @test prepare_buffer!(IOBuffer("  "), buf, UInt32(0)) == 0
 
 
-    buf = fill(UInt8(' '), 10);
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer(" 1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = fill(UInt8(' '), 1);
+    buf = zeros(UInt8, 1);
     @test prepare_buffer!(IOBuffer(" 1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = fill(UInt8(' '), 1);
+    buf = zeros(UInt8, 1);
     @test prepare_buffer!(IOBuffer("  1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = fill(UInt8(' '), 2);
+    buf = zeros(UInt8, 2);
     @test prepare_buffer!(IOBuffer("  1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = fill(UInt8(' '), 10);
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer("1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = fill(UInt8(' '), 1);
+    buf = zeros(UInt8, 1);
     @test prepare_buffer!(IOBuffer("1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = fill(UInt8(' '), 2);
+    buf = zeros(UInt8, 2);
     @test prepare_buffer!(IOBuffer("1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
 
-    buf = fill(UInt8(' '), 10);
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer("12"), buf, UInt32(0)) == 2
     @test buf[1] == UInt8('1')
     @test buf[2] == UInt8('2')
 
-    buf = fill(UInt8(' '), 1);
+    buf = zeros(UInt8, 1);
     @test prepare_buffer!(IOBuffer("12"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = fill(UInt8(' '), 2);
+    buf = zeros(UInt8, 2);
     @test prepare_buffer!(IOBuffer("12"), buf, UInt32(0)) == 2
     @test buf[1] == UInt8('1')
     @test buf[2] == UInt8('2')
 end
 
 @testset "initial buffer fill with BOM" begin
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 7));
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf"), buf, UInt32(0)) == 0
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 7));
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf "), buf, UInt32(0)) == 0
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 1));
+    buf = zeros(UInt8, 4);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf "), buf, UInt32(0)) == 0
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 2));
+    buf = zeros(UInt8, 5);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf  "), buf, UInt32(0)) == 0
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 2));
+    buf = zeros(UInt8, 5);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf  "), buf, UInt32(0)) == 0
 
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 7));
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf 1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 1));
+    buf = zeros(UInt8, 4);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf 1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 1));
+    buf = zeros(UInt8, 4);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf  1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 2));
+    buf = zeros(UInt8, 5);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf  1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 7));
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 1));
+    buf = zeros(UInt8, 4);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 2));
+    buf = zeros(UInt8, 5);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf1"), buf, UInt32(0)) == 1
     @test buf[1] == UInt8('1')
 
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 7));
+    buf = zeros(UInt8, 10);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf12"), buf, UInt32(0)) == 2
     @test buf[1] == UInt8('1')
     @test buf[2] == UInt8('2')
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 1));
+    buf = zeros(UInt8, 4);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf12"), buf, UInt32(0)) == 2
     @test buf[1] == UInt8('1')
     @test buf[2] == UInt8('2')
 
-    buf = vcat(b"\xef\xbb\xbf", fill(UInt8(' '), 2));
+    buf = zeros(UInt8, 5);
     @test prepare_buffer!(IOBuffer("\xef\xbb\xbf12"), buf, UInt32(0)) == 2
     @test buf[1] == UInt8('1')
     @test buf[2] == UInt8('2')
