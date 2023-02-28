@@ -16,16 +16,44 @@ end_of_stream(io::GzipDecompressorStream) = eof(io)
 
 readbytesall!(io::IOStream, buf, n) = UInt32(Base.readbytes!(io, buf, n; all = true))
 readbytesall!(io::IO, buf, n) = UInt32(Base.readbytes!(io, buf, n))
-function prepare_buffer!(io::IO, buf::Vector{UInt8}, last_newline_at)
+
+_nonspace(b::UInt8) = !isspace(Char(b))
+function _skip_over_initial_whitespace_and_bom!(io, buf, bytes_read_in)
+    bytes_read_in == 0 && return bytes_read_in # empty input -- nothing to skip
+    buffersize = UInt32(length(buf))
+    starts_with_bom = bytes_read_in > 2 && hasBOM(buf)
+    first_byte_to_check = (starts_with_bom ? 4 : 1)
+    # First byte that is not a whitespace or a BOM, zero if the entire buffer is only white
+    # space
+    populated = view(buf, 1:bytes_read_in)
+    first_valid_byte = something(findnext(_nonspace, populated, first_byte_to_check), 0)
+
+    # We'll keep refilling the buffer until it we find a non-space or we run out of bytes
+    while first_valid_byte == 0
+        bytes_read_in = readbytesall!(io, buf, buffersize)
+        bytes_read_in == 0 && return bytes_read_in
+        populated = view(buf, 1:bytes_read_in)
+        first_valid_byte = something(findnext(_nonspace, populated, 1), 0)
+    end
+
+    # We found a non-space byte -- we'll left-shift the spaces before it so that the buffer
+    # begins with a valid value and we'll try to refill the rest of the buffer.
+    # If first_valid_byte was already at the beginnig of the buffer, we don't have to do
+    # anything.
+    skip_over = UInt32(first_valid_byte - 1)
+    if skip_over > 0
+        bytes_read_in += prepare_buffer!(io, buf, skip_over)
+    end
+    return bytes_read_in - skip_over
+end
+
+function prepare_buffer!(io::IO, buf::Vector{UInt8}, last_newline_at::UInt32)
     ptr = pointer(buf)
     buffersize = UInt32(length(buf))
-    if last_newline_at == 0 # this is the first time we saw the buffer, we'll just fill it up
+    if last_newline_at == 0
+        # this is the first time we saw the buffer, we'll just fill it up
         bytes_read_in = readbytesall!(io, buf, buffersize)
-        if (bytes_read_in > 2 && hasBOM(buf)) || isspace(Char(first(buf)))
-            pos = hasBOM(buf) ? 4 : 1
-            pos = something(findnext(x->!isspace(Char(x)), buf, pos), pos)
-            bytes_read_in -= (UInt32(pos - 1) - prepare_buffer!(io, buf, UInt32(pos - 1)))
-        end
+        bytes_read_in = _skip_over_initial_whitespace_and_bom!(io, buf, bytes_read_in)
     elseif last_newline_at < buffersize
         # We'll keep the bytes that are past the last newline, shifting them to the left
         # and refill the rest of the buffer.
