@@ -34,7 +34,7 @@ function process_and_consume_task(parsing_queue::Channel{T}, result_buffers::Vec
             task_done!(consume_ctx, parsing_ctx, result_buf)
         end
     catch e
-        @warn "Task failed" exception=(e, catch_backtrace())
+        @warn "JSONLines parsing task failed" exception=(e, catch_backtrace())
         # If there was an exception, immediately stop processing the queue
         isopen(parsing_queue) && close(parsing_queue, e)
         # if the io/lexing was waiting for work to finish, we'll interrupt it here
