@@ -35,6 +35,7 @@ function estimate_task_size(parsing_ctx::ParsingContext)
     min_rows = max(2, cld(MIN_TASK_SIZE_IN_BYTES, ceil(Int, last(parsing_ctx.eols)  / length(parsing_ctx.eols))))
     return max(min_rows, cld(ceil(Int, length(parsing_ctx.eols) * ((1 + length(parsing_ctx.bytes)) / (1 + last(parsing_ctx.eols)))), parsing_ctx.maxtasks))
 end
+_nonspace(b::UInt8) = !isspace(Char(b))
 
 include("read_and_lex.jl")
 # include("init_parsing.jl")

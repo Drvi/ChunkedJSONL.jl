@@ -1,5 +1,3 @@
-_nonspace(b::UInt8) = !isspace(Char(b))
-
 function _parse_rows_forloop!(result_buf::TaskResultBuffer, task::AbstractVector{UInt32}, buf)
     tape = result_buf.tape
     empty!(result_buf)

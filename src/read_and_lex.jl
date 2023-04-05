@@ -17,7 +17,6 @@ end_of_stream(io::GzipDecompressorStream) = eof(io)
 readbytesall!(io::IOStream, buf, n) = UInt32(Base.readbytes!(io, buf, n; all = true))
 readbytesall!(io::IO, buf, n) = UInt32(Base.readbytes!(io, buf, n))
 
-_nonspace(b::UInt8) = !isspace(Char(b))
 function _skip_over_initial_whitespace_and_bom!(io, buf, bytes_read_in)
     bytes_read_in == 0 && return bytes_read_in # empty input -- nothing to skip
     buffersize = UInt32(length(buf))
