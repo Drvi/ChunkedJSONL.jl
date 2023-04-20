@@ -19,8 +19,9 @@ include("exceptions.jl")
 mutable struct TaskCondition
     ntasks::Int
     cond_wait::Threads.Condition
+    exception::Union{Nothing, Exception}
 end
-TaskCondition() = TaskCondition(0, Threads.Condition(ReentrantLock()))
+TaskCondition() = TaskCondition(0, Threads.Condition(ReentrantLock()), nothing)
 
 struct ParsingContext
     bytes::Vector{UInt8}
