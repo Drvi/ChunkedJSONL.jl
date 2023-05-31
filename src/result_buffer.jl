@@ -1,4 +1,4 @@
-struct TaskResultBuffer
+struct TaskResultBuffer <: AbstractResultBuffer
     id::Int
     tape::Vector{UInt64}
     tapeidxs::BufferedVector{Int}

@@ -4,7 +4,7 @@ using ChunkedJSONL: ValueExtractionContext
 alg=:serial
 
 @testset "Single elements" begin
-    for alg in [:serial, :singlebuffer, :doublebuffer]
+    for alg in [:serial, :parallel]
         @testset "Int $alg" begin
             ctx = ValueExtractionContext()
             ChunkedJSONL.parse_file(IOBuffer("1"), ctx, _force=alg)
@@ -127,12 +127,11 @@ alg=:serial
     end
 end
 
-
 @testset "Multiple lines small buffer" begin
-    for alg in [:serial, :singlebuffer, :doublebuffer]
+    for alg in [:serial, :parallel]
         @testset "Int $alg" begin
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer("1\n1"), ctx, _force=alg, buffersize=2)
+            ChunkedJSONL.parse_file(IOBuffer("1\n1"), ctx, _force=alg, buffersize=4)
 
             @test ctx.elements == [1,1]
         end
@@ -162,7 +161,7 @@ end
         end
         @testset "Array $alg" begin
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer("[]\n[]"), ctx, _force=alg, buffersize=3)
+            ChunkedJSONL.parse_file(IOBuffer("[]\n[]"), ctx, _force=alg, buffersize=4)
 
             @test ctx.elements == [[],[]]
 
@@ -203,7 +202,7 @@ end
         end
         @testset "Object $alg" begin
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer("{}\n{}"), ctx, _force=alg, buffersize=3)
+            ChunkedJSONL.parse_file(IOBuffer("{}\n{}"), ctx, _force=alg, buffersize=4)
 
             @test ctx.elements == [Dict{Symbol,Any}(),Dict{Symbol,Any}()]
 
@@ -246,7 +245,7 @@ end
 end
 
 @testset "Multiple lines" begin
-    for alg in [:serial, :singlebuffer, :doublebuffer]
+    for alg in [:serial, :parallel]
         @testset "Int $alg" begin
             ctx = ValueExtractionContext()
             ChunkedJSONL.parse_file(IOBuffer("1\n1"), ctx, _force=alg)
@@ -353,7 +352,7 @@ end
 end
 
 @testset "Multiple lines leading and trailing whitespace" begin
-    for alg in [:serial, :singlebuffer, :doublebuffer]
+    for alg in [:serial, :parallel]
         @testset "Int $alg" begin
             ctx = ValueExtractionContext()
             ChunkedJSONL.parse_file(IOBuffer(" 1 \n 1 "), ctx, _force=alg)
@@ -459,7 +458,7 @@ end
     end
 end
 @testset "Multiple lines leading and a lot of surrounding whitespace" begin
-    for alg in [:serial, :singlebuffer, :doublebuffer]
+    for alg in [:serial, :parallel]
         @testset "Int $alg" begin
             ctx = ValueExtractionContext()
             ChunkedJSONL.parse_file(IOBuffer("   1   \n   1   "), ctx, _force=alg)
@@ -565,9 +564,8 @@ end
     end
 end
 
-
 @testset "Multiple lines leading and trailing whitespace with BOM" begin
-    for alg in [:serial, :singlebuffer, :doublebuffer]
+    for alg in [:serial, :parallel]
         @testset "Int $alg" begin
             ctx = ValueExtractionContext()
             ChunkedJSONL.parse_file(IOBuffer("\xef\xbb\xbf 1 \n 1 "), ctx, _force=alg)
@@ -684,7 +682,7 @@ end
 end
 
 @testset "Multiple lines leading and trailing whitespace with BOM, 2 chunks" begin
-    for alg in [:serial, :singlebuffer, :doublebuffer]
+    for alg in [:serial, :parallel]
         @testset "Int $alg" begin
             ctx = ValueExtractionContext()
             ChunkedJSONL.parse_file(IOBuffer("\xef\xbb\xbf 1 \n 1 "), ctx, _force=alg, buffersize=4)
@@ -799,27 +797,23 @@ end
         end
         @testset "Empty input $alg" begin
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer(""), ctx, _force=alg, buffersize=1)
+            ChunkedJSONL.parse_file(IOBuffer(""), ctx, _force=alg, buffersize=4)
             @test isempty(ctx.elements)
 
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer(" "), ctx, _force=alg, buffersize=1)
+            ChunkedJSONL.parse_file(IOBuffer(" "), ctx, _force=alg, buffersize=4)
             @test isempty(ctx.elements)
 
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer(" "), ctx, _force=alg, buffersize=2)
+            ChunkedJSONL.parse_file(IOBuffer(" "), ctx, _force=alg, buffersize=4)
             @test isempty(ctx.elements)
 
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer("  "), ctx, _force=alg, buffersize=1)
+            ChunkedJSONL.parse_file(IOBuffer("  "), ctx, _force=alg, buffersize=4)
             @test isempty(ctx.elements)
 
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer("\xef\xbb\xbf"), ctx, _force=alg, buffersize=3)
-            @test isempty(ctx.elements)
-
-            ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer("\xef\xbb\xbf "), ctx, _force=alg, buffersize=3)
+            ChunkedJSONL.parse_file(IOBuffer("\xef\xbb\xbf"), ctx, _force=alg, buffersize=4)
             @test isempty(ctx.elements)
 
             ctx = ValueExtractionContext()
@@ -827,8 +821,58 @@ end
             @test isempty(ctx.elements)
 
             ctx = ValueExtractionContext()
-            ChunkedJSONL.parse_file(IOBuffer("\xef\xbb\xbf  "), ctx, _force=alg, buffersize=3)
+            ChunkedJSONL.parse_file(IOBuffer("\xef\xbb\xbf "), ctx, _force=alg, buffersize=4)
             @test isempty(ctx.elements)
+
+            ctx = ValueExtractionContext()
+            ChunkedJSONL.parse_file(IOBuffer("\xef\xbb\xbf  "), ctx, _force=alg, buffersize=4)
+            @test isempty(ctx.elements)
+        end
+    end
+end
+
+@testset "Skipping comments and whitespace" begin
+    for alg in [:serial, :parallel]
+        for comment in ('#', "#", UInt8('#'), [UInt8('#')])
+            @testset "comment: $(repr(comment)) $alg" begin
+                ctx = ValueExtractionContext()
+                ChunkedJSONL.parse_file(IOBuffer("    \n\n\n\n #\n#x\n#xx\n1\n\n\n#x\n1\n\n"), ctx, _force=alg, buffersize=4, comment=comment)
+
+                @test ctx.elements == [1, 1]
+            end
+        end
+    end
+end
+
+@testset "Limit and skipto" begin
+    for alg in [:serial, :parallel]
+        ctx = ValueExtractionContext()
+        ChunkedJSONL.parse_file(IOBuffer("1\n2\n3\n4\n5"), ctx, _force=alg, buffersize=4, skipto=2, limit=1)
+
+        @test ctx.elements == [3]
+
+        ctx = ValueExtractionContext()
+        ChunkedJSONL.parse_file(IOBuffer("1\n2\n\n3\n4\n5"), ctx, _force=alg, buffersize=4, skipto=2, limit=2)
+
+        @test ctx.elements == [3]
+
+        ctx = ValueExtractionContext()
+        ChunkedJSONL.parse_file(IOBuffer("1\n#\n#\n#\n2\n#\n3\n4\n5"), ctx, _force=alg, buffersize=4, skipto=2, limit=3, comment='#')
+
+        @test sort(ctx.elements) == [2,3]
+    end
+end
+
+@testset "Newlinechar" begin
+    for alg in [:serial, :parallel]
+        for (arg, nl) in (('\n', "\n"), ('\n', "\r\n"), ('\r', "\r"), (UInt8('\n'), "\n"), (UInt8('\n'), "\r\n"),
+                          (UInt8('\r'), "\r"), (nothing, "\r"), (nothing, "\n"), (nothing, "\r\n"))
+            @testset "arg: $(repr(arg)), nl: $(repr(nl)) $alg" begin
+                ctx = ValueExtractionContext()
+                ChunkedJSONL.parse_file(IOBuffer("1 $nl 1"), ctx, _force=alg, buffersize=4, newlinechar=arg)
+
+                @test ctx.elements == [1, 1]
+            end
         end
     end
 end

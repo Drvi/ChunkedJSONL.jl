@@ -1,57 +1,14 @@
-abstract type AbstractConsumeContext end
-abstract type AbstractTaskLocalConsumeContext <: AbstractConsumeContext end
-
-function setup_tasks! end
-function consume! end
-function task_done! end
-function sync_tasks end
-function cleanup end
-
-maybe_deepcopy(x::AbstractConsumeContext) = x
-maybe_deepcopy(x::AbstractTaskLocalConsumeContext) = deepcopy(x)
-
 struct DebugContext <: AbstractConsumeContext; end
 
-function consume!(consume_ctx::DebugContext, parsing_ctx::ParsingContext, task_buf::TaskResultBuffer, row_num::UInt32, eol_idx::UInt32)
+function ChunkedBase.consume!(consume_ctx::DebugContext, payload::ParsedPayload)
+    task_buf = payload.results
     io = IOBuffer()
-    write(io, string("Start row: ", row_num, ", nrows: ", length(task_buf.tapeidxs), ", $(Base.current_task()) "))
+    write(io, string("Start row: ", payload.row_num, ", nrows: ", length(task_buf.tapeidxs), ", $(Base.current_task()) "))
     printstyled(IOContext(io, :color => true), "❚", color=Int(hash(Base.current_task()) % UInt8))
     println(io)
     @info String(take!(io))
     return nothing
 end
-
-
-function setup_tasks!(consume_ctx::AbstractConsumeContext, parsing_ctx::ParsingContext, ntasks::Int)
-    @lock parsing_ctx.cond.cond_wait begin
-        parsing_ctx.cond.ntasks = ntasks
-    end
-end
-function task_done!(consume_ctx::AbstractConsumeContext, parsing_ctx::ParsingContext, result_buf::TaskResultBuffer)
-    @lock parsing_ctx.cond.cond_wait begin
-        parsing_ctx.cond.ntasks -= 1
-        notify(parsing_ctx.cond.cond_wait)
-    end
-end
-function sync_tasks(consume_ctx::AbstractConsumeContext, parsing_ctx::ParsingContext, ntasks::Int)
-    @lock parsing_ctx.cond.cond_wait begin
-        while true
-            parsing_ctx.cond.exception !== nothing && throw(parsing_ctx.cond.exception)
-            parsing_ctx.cond.ntasks == 0 && break
-            wait(parsing_ctx.cond.cond_wait)
-        end
-    end
-end
-cleanup(consume_ctx::AbstractConsumeContext, e::Exception) = nothing
-
-struct SkipContext <: AbstractConsumeContext
-    SkipContext() = new()
-end
-function consume!(consume_ctx::SkipContext, parsing_ctx::ParsingContext, task_buf::TaskResultBuffer, row_num::UInt32, eol_idx::UInt32)
-    return nothing
-end
-
-
 struct ValueExtractionContext <: AbstractConsumeContext
     elements::Vector{Union{Dict{Symbol},Vector,String,Nothing,Bool,Float64,Int}}
     indices::Vector{Int}
@@ -64,11 +21,11 @@ function Base.sort!(ctx::ValueExtractionContext)
     return ctx
 end
 
-function consume!(consume_ctx::ValueExtractionContext, parsing_ctx::ParsingContext, task_buf::TaskResultBuffer, row_num::UInt32, eol_idx::UInt32)
-    tape = task_buf.tape
-    buf = parsing_ctx.bytes
-    row = Int(row_num)
-    @inbounds for tapeidx in task_buf.tapeidxs
+function ChunkedBase.consume!(consume_ctx::ValueExtractionContext, payload::ParsedPayload)
+    tape = payload.results.tape
+    buf = payload.chunking_ctx.bytes
+    row = Int(payload.row_num)
+    @inbounds for tapeidx in payload.results.tapeidxs
         t = tape[tapeidx]
         val = JSON3.getvalue(Any, buf, tape, tapeidx, t)
         if isa(val, Union{JSON3.Object,JSON3.Array})

@@ -1,90 +1,78 @@
 module ChunkedJSONL
 
-export parse_file, consume!, DebugContext, AbstractConsumeContext
+export parse_file, DebugContext
+export consume!, setup_tasks!, task_done!
 
-using ScanByte
-import JSON3
-using .Threads: @spawn
-using TranscodingStreams
-using CodecZlib
-using Mmap
+using JSON3
+using SnoopPrecompile
+using CodecZlibNG
+using ChunkedBase
+using SentinelArrays.BufferedVectors
 
-const MIN_TASK_SIZE_IN_BYTES = 16 * 1024
-
-include("BufferedVectors.jl")
-include("TaskResults.jl")
-
-include("exceptions.jl")
-
-mutable struct TaskCondition
-    ntasks::Int
-    cond_wait::Threads.Condition
-    exception::Union{Nothing, Exception}
+struct ParsingContext <: AbstractParsingContext
+    ignoreemptyrows::Bool
 end
-TaskCondition() = TaskCondition(0, Threads.Condition(ReentrantLock()), nothing)
 
-struct ParsingContext
-    bytes::Vector{UInt8}
-    eols::BufferedVector{UInt32}
-    nworkers::UInt8
-    maxtasks::UInt8
-    nresults::UInt8
-    cond::TaskCondition
-end
-function estimate_task_size(parsing_ctx::ParsingContext)
-    length(parsing_ctx.eols) == 1 && return 1 # empty file
-    min_rows = max(2, cld(MIN_TASK_SIZE_IN_BYTES, ceil(Int, last(parsing_ctx.eols)  / length(parsing_ctx.eols))))
-    return max(min_rows, cld(ceil(Int, length(parsing_ctx.eols) * ((1 + length(parsing_ctx.bytes)) / (1 + last(parsing_ctx.eols)))), parsing_ctx.maxtasks))
-end
 _nonspace(b::UInt8) = !isspace(Char(b))
 
-include("read_and_lex.jl")
-# include("init_parsing.jl")
+include("result_buffer.jl")
 include("consume_context.jl")
-
 include("row_parsing.jl")
-include("parser_serial.jl")
-include("parser_singlebuffer.jl")
-include("parser_doublebuffer.jl")
-
 
 function parse_file(
     input,
     consume_ctx::AbstractConsumeContext=DebugContext();
     # In bytes. This absolutely has to be larger than any single row.
     # Much safer if any two consecutive rows are smaller than this threshold.
-    buffersize::Integer=UInt32(Threads.nthreads() * 1024 * 1024),
+    buffersize::Integer=Threads.nthreads() * 1024 * 1024,
     nworkers::Integer=Threads.nthreads(),
-    maxtasks::Integer=2nworkers,
-    nresults::Integer=maxtasks,
+    limit::Int=0,
+    skipto::Int=0,
+    comment::Union{Nothing,String,Char,UInt8,Vector{UInt8}}=nothing,
+    ignoreemptyrows::Bool=true,
+    newlinechar::Union{UInt8,Char,Nothing}=UInt8('\n'),
     use_mmap::Bool=false,
-    _force::Symbol=:none,
+    _force::Symbol=:default,
 )
-    0 < buffersize < typemax(UInt32) || throw(ArgumentError("`buffersize` argument must be larger than 0 and smaller than 4_294_967_295 bytes."))
-    nworkers > 0 || throw(ArgumentError("`nworkers` argument must be larger than 0."))
-    maxtasks >= nworkers || throw(ArgumentError("`maxtasks` argument must be larger of equal to the `nworkers` argument."))
-    # otherwise not implemented; implementation postponed once we know why take!/wait allocates
-    nresults == maxtasks || throw(ArgumentError("Currently, `nresults` argument must be equal to the `maxtasks` argument."))
-
-    should_close, io = _input_to_io(input, use_mmap)
-
-    lexer_state = LexerState(io)
-    parsing_ctx = ParsingContext(Vector{UInt8}(undef, buffersize), BufferedVector{UInt32}(), nworkers, maxtasks, nresults, TaskCondition())
-    read_and_lex!(lexer_state, parsing_ctx)
-
-    if _force === :doublebuffer
-        _parse_file_doublebuffer(lexer_state, parsing_ctx, consume_ctx)
-    elseif _force === :singlebuffer
-        _parse_file_singlebuffer(lexer_state, parsing_ctx, consume_ctx)
-    elseif _force === :serial || Threads.nthreads() == 1 || parsing_ctx.nworkers == 1 || parsing_ctx.maxtasks == 1 || lexer_state.last_newline_at < MIN_TASK_SIZE_IN_BYTES
-              _parse_file_serial(lexer_state, parsing_ctx, consume_ctx)
-    elseif !lexer_state.done
-        _parse_file_doublebuffer(lexer_state, parsing_ctx, consume_ctx)
-    else
-        _parse_file_singlebuffer(lexer_state, parsing_ctx, consume_ctx)
+    _force in (:default, :serial, :parallel) || throw(ArgumentError("`_force` argument must be one of (:default, :serial, :parallel)."))
+    4 <= buffersize <= typemax(Int32) || throw(ArgumentError("`buffersize` argument must be larger than 4 and smaller than 2_147_483_648 bytes."))
+    0 < nworkers < 256 || throw(ArgumentError("`nworkers` argument must be larger than 0 and smaller than 256."))
+    0 <= skipto <= typemax(Int) || throw(ArgumentError("`skipto` argument must be positive and smaller than 9_223_372_036_854_775_808."))
+    0 <= limit <= typemax(Int) || throw(ArgumentError("`limit` argument must be positive and smaller than 9_223_372_036_854_775_808."))
+    if !isnothing(newlinechar)
+        newlinechar = UInt8(newlinechar)
+        sizeof(newlinechar) > 1 && throw(ArgumentError("`newlinechar` must be a single-byte character."))
     end
-    # end
-    should_close && close(io)
+
+    should_close, io = ChunkedBase._input_to_io(input, use_mmap)
+    parsing_ctx = ParsingContext(ignoreemptyrows)
+    chunking_ctx = ChunkingContext(buffersize, nworkers, limit, comment)
+
+    # chunking_ctx.bytes is now filled with `bytes_read_in` bytes, we've skipped over BOM
+    # and since the third argument is true, we also skipped over any leading whitespace.
+    bytes_read_in = ChunkedBase.initial_read!(io, chunking_ctx, true)
+    newline = isnothing(newlinechar) ?
+        ChunkedBase._detect_newline(chunking_ctx.bytes, 1, bytes_read_in) :
+        UInt8(newlinechar)
+
+    lexer = Lexer(io, nothing, newline)
+    ChunkedBase.initial_lex!(lexer, chunking_ctx, bytes_read_in)
+    ChunkedBase.skip_rows_init!(lexer, chunking_ctx, skipto)
+
+    nrows = length(chunking_ctx.newline_positions) - 1
+    try
+        if ChunkedBase.should_use_parallel(chunking_ctx, _force)
+            ntasks = tasks_per_chunk(chunking_ctx)
+            nbuffers = total_result_buffers_count(chunking_ctx)
+            result_buffers = TaskResultBuffer[TaskResultBuffer(id, cld(nrows, ntasks)) for id in 1:nbuffers]
+            parse_file_parallel(lexer, parsing_ctx, consume_ctx, chunking_ctx, result_buffers, Tuple{})
+        else
+            result_buf = TaskResultBuffer(0, nrows)
+            parse_file_serial(lexer, parsing_ctx, consume_ctx, chunking_ctx, result_buf, Tuple{})
+        end
+    finally
+        should_close && close(io)
+    end
     return nothing
 end
 
