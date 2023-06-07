@@ -31,9 +31,12 @@ function ChunkedBase.consume!(consume_ctx::ValueExtractionContext, payload::Pars
         if isa(val, Union{JSON3.Object,JSON3.Array})
             val = copy(val)
         end
-        @lock consume_ctx.lock begin
+        lock(consume_ctx.lock)
+        try
             push!(consume_ctx.elements, val)
             push!(consume_ctx.indices, row)
+        finally
+            unlock(consume_ctx.lock)
         end
         row += 1
     end
