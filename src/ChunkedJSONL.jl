@@ -35,10 +35,7 @@ function parse_file(
     _force::Symbol=:default,
 )
     _force in (:default, :serial, :parallel) || throw(ArgumentError("`_force` argument must be one of (:default, :serial, :parallel)."))
-    4 <= buffersize <= typemax(Int32) || throw(ArgumentError("`buffersize` argument must be larger than 4 and smaller than 2_147_483_648 bytes."))
     0 < nworkers < 256 || throw(ArgumentError("`nworkers` argument must be larger than 0 and smaller than 256."))
-    0 <= skipto <= typemax(Int) || throw(ArgumentError("`skipto` argument must be positive and smaller than 9_223_372_036_854_775_808."))
-    0 <= limit <= typemax(Int) || throw(ArgumentError("`limit` argument must be positive and smaller than 9_223_372_036_854_775_808."))
     if !isnothing(newlinechar)
         newlinechar = UInt8(newlinechar)
         sizeof(newlinechar) > 1 && throw(ArgumentError("`newlinechar` must be a single-byte character."))
