@@ -13,6 +13,9 @@ SentinelArrays = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
 SnoopPrecompile = "66db9d55-30c0-4569-8b51-7e840670fc0c"
 TranscodingStreams = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 
+[compat]
+CodecZlibNG = "0.1"
+
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
