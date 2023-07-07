@@ -10,7 +10,7 @@ SentinelArrays = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
 SnoopPrecompile = "66db9d55-30c0-4569-8b51-7e840670fc0c"
 
 [compat]
-ChunkedBase = "0.2"
+ChunkedBase = "0.3"
 JSON3 = "1"
 SentinelArrays = "1"
 SnoopPrecompile = "1"

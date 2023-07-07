@@ -1,6 +1,6 @@
 module ChunkedJSONL
 
-export parse_file, DebugContext
+export parse_file, DebugContext, AbstractConsumeContext
 export consume!, setup_tasks!, task_done!
 
 using JSON3
@@ -8,14 +8,16 @@ using SnoopPrecompile
 using ChunkedBase
 using SentinelArrays.BufferedVectors
 
-struct ParsingContext <: AbstractParsingContext
-    ignoreemptyrows::Bool
-end
-
 _nonspace(b::UInt8) = !isspace(Char(b))
 
 include("result_buffer.jl")
 include("consume_context.jl")
+
+struct ParsingContext <: AbstractParsingContext
+    ignoreemptyrows::Bool
+    result_buffers::Vector{TaskResultBuffer}
+end
+
 include("row_parsing.jl")
 
 function parse_file(
@@ -40,7 +42,6 @@ function parse_file(
     end
 
     should_close, io = ChunkedBase._input_to_io(input, use_mmap)
-    parsing_ctx = ParsingContext(ignoreemptyrows)
     chunking_ctx = ChunkingContext(buffersize, nworkers, limit, comment)
 
     # chunking_ctx.bytes is now filled with `bytes_read_in` bytes, we've skipped over BOM
@@ -55,15 +56,20 @@ function parse_file(
     ChunkedBase.skip_rows_init!(lexer, chunking_ctx, skipto)
 
     nrows = length(chunking_ctx.newline_positions) - 1
+    if ChunkedBase.should_use_parallel(chunking_ctx, _force)
+        ntasks = tasks_per_chunk(chunking_ctx)
+        nbuffers = total_result_buffers_count(chunking_ctx)
+        result_buffers = TaskResultBuffer[TaskResultBuffer(id, cld(nrows, ntasks)) for id in 1:nbuffers]
+    else
+        result_buffers = TaskResultBuffer[TaskResultBuffer(0, nrows)]
+    end
+
+    parsing_ctx = ParsingContext(ignoreemptyrows, result_buffers)
     try
         if ChunkedBase.should_use_parallel(chunking_ctx, _force)
-            ntasks = tasks_per_chunk(chunking_ctx)
-            nbuffers = total_result_buffers_count(chunking_ctx)
-            result_buffers = TaskResultBuffer[TaskResultBuffer(id, cld(nrows, ntasks)) for id in 1:nbuffers]
-            parse_file_parallel(lexer, parsing_ctx, consume_ctx, chunking_ctx, result_buffers, Tuple{})
+            parse_file_parallel(lexer, parsing_ctx, consume_ctx, chunking_ctx)
         else
-            result_buf = TaskResultBuffer(0, nrows)
-            parse_file_serial(lexer, parsing_ctx, consume_ctx, chunking_ctx, result_buf, Tuple{})
+            parse_file_serial(lexer, parsing_ctx, consume_ctx, chunking_ctx)
         end
     finally
         should_close && close(io)
